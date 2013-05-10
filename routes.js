@@ -1140,6 +1140,7 @@ exports.servePDF = function(req, res) {
     , options;
     var docName = req.params.docName;
     var docUser = req.session.currentUser;
+    var docName = docName.replace(/\s+/g, '-').toLowerCase()
     var dirPath = configs.directory.path + docUser + "/" + docName + "/";
 
     // find the pdf
@@ -1165,6 +1166,7 @@ exports.compileDoc = function(req, res) {
     , documentId = req.body.documentId
     , docName = req.body.docName
     , docUser = req.session.currentUser;
+    var docName = docName.replace(/\s+/g, '-').toLowerCase()
 
 
     if (!(req.session.currentUser && req.session.isLoggedIn)) {
