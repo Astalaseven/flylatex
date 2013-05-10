@@ -1132,6 +1132,7 @@ exports.servePDF = function(req, res) {
     var documentId = req.params.documentId
     , options;
     var docName = req.params.docName;
+    var dirPath = configs.directory.path + docName +"/";
 
     // find the pdf
     //PDFDoc.findOne({forDocument:documentId}, function(err, doc) {
@@ -1141,7 +1142,7 @@ exports.servePDF = function(req, res) {
 	//    return;
 	//}
 	// write pdf file to user
-	fs.createReadStream(configs.directory.path+docName+".pdf").pipe(res);
+	fs.createReadStream(dirPath+docName+".pdf").pipe(res);
     //});
 };
 
@@ -1188,76 +1189,72 @@ exports.compileDoc = function(req, res) {
 	// get the document text
 	docText = docLines.join();
 
-	// make temporary directory to create and compile latex pdf
-	temp.mkdir(docName, function(err, dirPath){
-	    var inputPath = path.join(dirPath, docName+".tex");
-	    
-	    fs.writeFile(inputPath, docText, function(err) {
+	// make directory to create and compile latex pdf
+	var dirPath = configs.directory.path + docName +"/";
+
+	fs.mkdirp(dirPath, function(err) {
 		if (err) {
-		    response.errors.push("An error occured even before compiling");
+		console.log("An error occured while creating directory: " , dirPath);
+		} else {
+		console.log("Successfully created: ", dirPath);
+		}
+	});
+	
+	var inputPath = path.join(dirPath, docName+".tex");
+    
+    fs.writeFile(inputPath, docText, function(err) {
+	if (err) {
+	    response.errors.push("An error occured even before compiling");
+	    res.json(response);
+	    return;
+	}
+	process.chdir(dirPath);
+
+	// compile the document (or at least try)
+	// redirect the stdin, stderr results of compilation
+	// since the results of compilation will eventually be
+	// written to the log file
+	exec("pdflatex -interaction=nonstopmode "+ inputPath +" > /dev/null 2>&1", function(err) {
+	    // store the logs for the user here
+	    fs.readFile(path.join(dirPath, docName+".log"), function(err, data){
+		if (err) {
+		    response.errors.push("Error while trying to read logs.");
+		}
+		
+		// store the 'logs' from the compile
+		response.logs = (data ? data.toString() : "");
+		
+		var errorStr = "An error occured before or during compilation of '"+ docName +"'"; 
+		if (err) {
+		    console.log(err);
+		    response.errors.push(errorStr);
 		    res.json(response);
 		    return;
 		}
-		process.chdir(dirPath);
 
-		// compile the document (or at least try)
-		// redirect the stdin, stderr results of compilation
-		// since the results of compilation will eventually be
-		// written to the log file
-		exec("pdflatex -interaction=nonstopmode "+ inputPath +" > /dev/null 2>&1", function(err) {
-		    // store the logs for the user here
-		    fs.readFile(path.join(dirPath, docName+".log"), function(err, data){
-			if (err) {
-			    response.errors.push("Error while trying to read logs.");
-			}
-			
-			// store the 'logs' from the compile
-			response.logs = (data ? data.toString() : "");
-			
-			var errorStr = "An error occured before or during compilation of '"+docName+"'"; 
-			if (err) {
-			    console.log(err);
-			    response.errors.push(errorStr);
-			    res.json(response);
-			    return;
-			}
+	    if (err) {
+			console.log(err);
+			response.errors.push(errorStr);
+			res.json(response); 
+			return;
+	    } else {
+		console.log("Successfully saved "+ docName +" in "+ dirPath);
+		    if (err) {
+			console.log(err);
+			response.errors.push(errorStr);
+			res.json(response);
+			return;
+		    }
+			response.infos.push("Successfully compiled "+ docName);
+		    // make the compiledDocURI
+		    response.compiledDocURI = "/servepdf/"+docName;
+		    // send response back to user
+		    res.json(response);
+	    }
 
-			// store the compile pdf document in the cloud
-
-			// create new PDFDoc
-			var newpdf = new PDFDoc();
-			newpdf.forDocument = documentId;
-			newpdf.title = docName+".pdf";
-			tempfile = path.join(dirPath, newpdf.title);
-			fs.copy(tempfile
-				, configs.directory.path + newpdf.title
-				, function(err){
-			    if (err) {
-				console.log(err);
-				response.errors.push(errorStr);
-				res.json(response); 
-				return;
-			    } else {
-				console.log("Successfully saved "+newpdf.title+" in "+configs.directory.path);
-				newpdf.save(function(err) {
-				    if (err) {
-					console.log(err);
-					response.errors.push(errorStr);
-					res.json(response);
-					return;
-				    }
-				    response.infos.push("Successfully compiled "+ docName);
-				    // make the compiledDocURI
-				    response.compiledDocURI = "/servepdf/"+docName;
-				    // send response back to user
-				    res.json(response);
-				});
-			    }
-			});
-		    });
-		});
 	    });
 	});
+    });
     });
 };
 
