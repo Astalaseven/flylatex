@@ -257,9 +257,9 @@ exports.processSignUpData = function(req, res) {
     }
 
     // make sure valid password
-    if (!(newUser.password.length > 4 // password has to be at least 5 chars 
+    if (!(newUser.password.length > 5 // password has to be at least 6 chars 
 	  && /\d+/.test(newUser.password))) { // password has to have at least one digit
-	errors["passwordInvalid"] = "Password must be at least 5 chars and must contain at least one digit";
+	errors["passwordInvalid"] = "Password must be at least 6 chars and must contain at least one digit";
 	isError = true;
     }
 
