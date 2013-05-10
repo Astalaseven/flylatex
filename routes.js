@@ -18,6 +18,7 @@ var mongoose = require("mongoose")
 // load configurations here
 , configs = require("./configs")
 
+, express = require("express")
 , temp = require("temp")
 , fs = require("fs-extra")
 , util = require("util")
@@ -355,17 +356,19 @@ exports.createDoc = function(req, res) {
 		   }
     
     var docName = req.body.docName;
+    // change name of the doc for better file gestion
+    var docName = docName.replace(/\s+/g, '-').toLowerCase();
 
     if (!(docName.length && docName.length > 0)) {
-	// check that document's name is not empty
-	response.errors.push("Error in creating document with no title or name");
-	res.json(response);
-	return;
+		// check that document's name is not empty
+		response.errors.push("Error in creating document with no title or name");
+		res.json(response);
+		return;
     } else if (!(req.session.isLoggedIn && req.session.currentUser)) {
-	// user is not logged in
-	response.errors.push("You're not not logged in. Please log in!");
-	res.json(response);
-	return;
+		// user is not logged in
+		response.errors.push("You're not not logged in. Please log in!");
+		res.json(response);
+		return;
     }
 
     // check the list of documents
@@ -379,7 +382,7 @@ exports.createDoc = function(req, res) {
 	}
     }
     if (found) {
-	response.errors.push("Error in creating document that shares its name with an already existing document you have.");
+	response.errors.push("Error in creating document '"+docName+"'' that shares its name with an already existing document you have.");
 	res.json(response);
 	return;
     } else {
@@ -391,7 +394,7 @@ exports.createDoc = function(req, res) {
 	} else {
 	    // so we can create a new document 
 	    // the new document will have only one line for starters
-	    var newDoc = createNewDocument(req.body.docName, req.session.currentUser);
+	    var newDoc = createNewDocument(docName, req.session.currentUser);
 
 	    // by default, document privilege for the
 	    // current user is 7 (full access)
@@ -434,7 +437,7 @@ exports.createDoc = function(req, res) {
 		response.newDocument = newUserDocument;
 		
 		// inform user of new document creation
-		response.infos.push("Just created the new Document: " + req.body.docName + " Hooray!");
+		response.infos.push("Just created the new Document: " + docName + ". Hooray!");
 		res.json(response);
 	    });
 	}
@@ -1128,17 +1131,18 @@ exports.reloadSession = function(req, res) {
 exports.servePDF = function(req, res) {
     var documentId = req.params.documentId
     , options;
+    var docName = req.params.docName;
 
     // find the pdf
-    PDFDoc.findOne({forDocument:documentId}, function(err, doc) {
-	if (err || !doc) {
-	    req.flash("error", "PDF not found or an error occured while reading the pdf");
-	    res.redirect("back");
-	    return;
-	}
+    //PDFDoc.findOne({forDocument:documentId}, function(err, doc) {
+	//if (err || !doc) {
+	//    req.flash("error", "PDF '"+ docName + req.body.documentName + req.body.docName + req.params.docName + req.params.documentName + "' not found or an error occured while reading the pdf");
+	//    res.redirect("back");
+	//    return;
+	//}
 	// write pdf file to user
-	fs.createReadStream(configs.directory.path+documentId+".pdf").pipe(res);
-    });
+	fs.createReadStream(configs.directory.path+docName+".pdf").pipe(res);
+    //});
 };
 
 /**
@@ -1149,7 +1153,9 @@ exports.servePDF = function(req, res) {
 exports.compileDoc = function(req, res) {
     // initialize the 'response' JS object to send back
     var response = {infos:[], errors: [], logs:"", compiledDocURI:null}
-    , documentId = req.body.documentId;
+    , documentId = req.body.documentId
+    , docName = req.body.docName;
+
 
     if (!(req.session.currentUser && req.session.isLoggedIn)) {
 	response.errors.push("You are not logged in");
@@ -1160,7 +1166,7 @@ exports.compileDoc = function(req, res) {
     // first load the text of the document from the database
     Document.findOne({_id:documentId}, function(err, doc) {
 	if (err || !doc) {
-	    response.errors.push("An Error Occured while trying to open the document");
+	    response.errors.push("An error occured while trying to open the document");
 	    res.json(response);
 	    return;
 	}
@@ -1183,8 +1189,8 @@ exports.compileDoc = function(req, res) {
 	docText = docLines.join();
 
 	// make temporary directory to create and compile latex pdf
-	temp.mkdir("pdfcreator", function(err, dirPath){
-	    var inputPath = path.join(dirPath, documentId+".tex");
+	temp.mkdir(docName, function(err, dirPath){
+	    var inputPath = path.join(dirPath, docName+".tex");
 	    
 	    fs.writeFile(inputPath, docText, function(err) {
 		if (err) {
@@ -1200,7 +1206,7 @@ exports.compileDoc = function(req, res) {
 		// written to the log file
 		exec("pdflatex -interaction=nonstopmode "+ inputPath +" > /dev/null 2>&1", function(err) {
 		    // store the logs for the user here
-		    fs.readFile(path.join(dirPath, documentId+".log"), function(err, data){
+		    fs.readFile(path.join(dirPath, docName+".log"), function(err, data){
 			if (err) {
 			    response.errors.push("Error while trying to read logs.");
 			}
@@ -1208,7 +1214,7 @@ exports.compileDoc = function(req, res) {
 			// store the 'logs' from the compile
 			response.logs = (data ? data.toString() : "");
 			
-			var errorStr = "An error occured before or during compilation";
+			var errorStr = "An error occured before or during compilation of '"+docName+"'"; 
 			if (err) {
 			    console.log(err);
 			    response.errors.push(errorStr);
@@ -1221,7 +1227,7 @@ exports.compileDoc = function(req, res) {
 			// create new PDFDoc
 			var newpdf = new PDFDoc();
 			newpdf.forDocument = documentId;
-			newpdf.title = documentId+".pdf";
+			newpdf.title = docName+".pdf";
 			tempfile = path.join(dirPath, newpdf.title);
 			fs.copy(tempfile
 				, configs.directory.path + newpdf.title
@@ -1229,7 +1235,7 @@ exports.compileDoc = function(req, res) {
 			    if (err) {
 				console.log(err);
 				response.errors.push(errorStr);
-				res.json(response);
+				res.json(response); 
 				return;
 			    } else {
 				console.log("Successfully saved "+newpdf.title+" in "+configs.directory.path);
@@ -1240,9 +1246,9 @@ exports.compileDoc = function(req, res) {
 					res.json(response);
 					return;
 				    }
-				    response.infos.push("Successfully compiled "+ req.body.documentName);
+				    response.infos.push("Successfully compiled "+ docName);
 				    // make the compiledDocURI
-				    response.compiledDocURI = "/servepdf/"+documentId;
+				    response.compiledDocURI = "/servepdf/"+docName;
 				    // send response back to user
 				    res.json(response);
 				});
@@ -1341,11 +1347,12 @@ exports.openDocument = function(req, res) {
 	, sharesWith;
 
 	// retrieve the document from the current user session
-	docInSession = searchForDocsInSession(documentId, req.session);	
+	docInSession = searchForDocsInSession(documentId, req.session);
 	// handle lag in findOne callback execution
 	if (docInSession == null) {
 	    return;
 	}
+	
 
 	// get document lines
 	doc.lines.forEach(function(item, index) {

@@ -107,7 +107,7 @@ app.post('/savedoc', routes.saveDocument);
 app.post('/compiledoc', routes.compileDoc);
 
 // for serving pdf's for documents with specific id's
-app.get('/servepdf/:documentId', routes.servePDF);
+app.get('/servepdf/:docName', routes.servePDF);
 
 
 /** end of ROUTES */
