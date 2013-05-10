@@ -244,9 +244,16 @@ exports.processSignUpData = function(req, res) {
     var isError = false;
     var newUser = req.body.newUser;
 
-    // validate userName: make sure no one else has that username
+    // validate userName: make sure user is not blank
     if (newUser.userName.length == 0) {
-	errors["userNameToken"] = "Enter a username";
+	errors["userNameToken"] = "Enter an username";
+	isError = true;
+    }
+
+    // no special characters because directory with same name
+    if (!(/^[a-zA-Z0-9]+$/.test(newUser.userName))) {
+	errors["userNameInvalid"] = "Enter an alphanumeric username";
+	isError = true;
     }
 
     // make sure valid password
@@ -261,7 +268,6 @@ exports.processSignUpData = function(req, res) {
 	errors["passwordNoMatch"] = "The Confirm Password should match the initial password entry";
 	isError = true;
     }
-
 
     // make sure email is valid
     if (!(/^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/.test(newUser.email))) {
@@ -321,7 +327,8 @@ exports.processSignUpData = function(req, res) {
 		      // logged in and ready to rumble!
 		      res.redirect("home");     
 		  }
-	      });
+		  });
+
     
 	
     } else {
@@ -1132,7 +1139,8 @@ exports.servePDF = function(req, res) {
     var documentId = req.params.documentId
     , options;
     var docName = req.params.docName;
-    var dirPath = configs.directory.path + docName +"/";
+    var docUser = req.session.currentUser;
+    var dirPath = configs.directory.path + docUser + "/" + docName + "/";
 
     // find the pdf
     //PDFDoc.findOne({forDocument:documentId}, function(err, doc) {
@@ -1142,7 +1150,7 @@ exports.servePDF = function(req, res) {
 	//    return;
 	//}
 	// write pdf file to user
-	fs.createReadStream(dirPath+docName+".pdf").pipe(res);
+	fs.createReadStream(dirPath + docName +".pdf").pipe(res);
     //});
 };
 
@@ -1155,7 +1163,8 @@ exports.compileDoc = function(req, res) {
     // initialize the 'response' JS object to send back
     var response = {infos:[], errors: [], logs:"", compiledDocURI:null}
     , documentId = req.body.documentId
-    , docName = req.body.docName;
+    , docName = req.body.docName
+    , docUser = req.session.currentUser;
 
 
     if (!(req.session.currentUser && req.session.isLoggedIn)) {
@@ -1190,7 +1199,7 @@ exports.compileDoc = function(req, res) {
 	docText = docLines.join();
 
 	// make directory to create and compile latex pdf
-	var dirPath = configs.directory.path + docName +"/";
+	var dirPath = configs.directory.path + docUser + "/" + docName + "/";
 
 	fs.mkdirp(dirPath, function(err) {
 		if (err) {
